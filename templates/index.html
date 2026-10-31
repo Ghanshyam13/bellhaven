@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block body %}
+{% if dry_run %}<div class="dry">DRY RUN mode: Approve shows the exact API calls but writes nothing.</div>{% endif %}
+
+<div class="tabs">
+  {% for t in tabs %}
+    <a href="{{ url_for('index', status=t) }}" class="{{ 'on' if t==status }}">{{ t|capitalize }}{% if t!='all' %}<b>{{ counts.get(t,0) }}</b>{% endif %}</a>
+  {% endfor %}
+</div>
+
+{% if status == 'pending' and total %}
+<form method="post" action="{{ url_for('bulk') }}" id="bulkform" onsubmit="return confirmBulk(event)">
+  <input type="hidden" name="status" value="{{ status }}">
+  <div class="bulk">
+    <button type="button" onclick="pick(true)">Select all high-confidence</button>
+    <button type="button" onclick="pick(null)">Clear</button>
+    <button class="approve" name="action" value="approve">Approve selected</button>
+    <button class="reject" name="action" value="reject">Reject selected</button>
+    <span class="muted" id="selcount">0 selected</span>
+  </div>
+{% endif %}
+
+{% if not total %}
+  <div class="card">Nothing here. {% if status=='pending' %}Everything has been decided - run <code>python pipeline.py</code> to look for new changes.{% endif %}</div>
+{% endif %}
+
+{% for title, rows in groups.items() %}
+  <h2 class="group">{{ title }}</h2>
+  {% for p in rows %}
+  {% set d = p.payload %}
+  <div class="card {{ p.status }}" id="p{{ p.id }}">
+    <div class="top">
+      {% if status == 'pending' %}<input type="checkbox" name="ids" value="{{ p.id }}" data-conf="{{ p.confidence }}" onchange="count()">{% endif %}
+      <span class="badge k-{{ p.kind }}">{{ kind_label[p.kind] }}</span>
+      <span class="badge {{ 'high' if p.confidence=='high' else 'med' }}">{{ p.confidence }} confidence</span>
+      <span class="t">{{ p.title }}</span>
+      <span class="badge">{{ p.status }}</span>
+    </div>
+    <div class="sum">{{ p.summary }}</div>
+
+    <table>
+      <tr><th>Account</th><th>Field</th><th>Current</th><th>Proposed</th></tr>
+      {% for x in d.diff %}
+      <tr><td>{{ x.account }}{% if x.account_id %}<br><span class="id">{{ x.account_id }}</span>{% endif %}</td>
+          <td><code>{{ x.field }}</code></td><td class="old">{{ x.old if x.old != '' else '—' }}</td>
+          <td class="new">{{ x.new }}{% if x.new_id %}<br><span class="id">{{ x.new_id }}</span>{% endif %}</td></tr>
+      {% endfor %}
+    </table>
+
+    <details {{ 'open' if p.status=='pending' }}>
+      <summary>Evidence: website vs CRM</summary>
+      <table>
+        <tr><th></th><th>Website</th><th>CRM</th><th></th></tr>
+        {% for e in d.evidence %}
+        <tr><td><b>{{ e.label }}</b></td><td>{{ e.website }}</td><td>{{ e.crm }}</td>
+            <td>{% if e.ok is true %}<span class="ok">&#10003;</span>{% elif e.ok is false %}<span class="no">&ne;</span>{% endif %}
+                <span class="muted">{{ e.note }}</span></td></tr>
+        {% endfor %}
+      </table>
+      <ul class="notes">{% for n in d.notes %}<li>{{ n }}</li>{% endfor %}</ul>
+      <div class="muted" style="font-size:13px">
+        {% if d.links.website %}<a href="{{ d.links.website }}" target="_blank">website page</a> &middot; {% endif %}
+        CRM: {% for c in d.links.crm or [] %}<span class="id">{{ c }}</span> {% endfor %}
+      </div>
+    </details>
+
+    {% if p.error %}<div class="err">{{ p.error }}</div>{% endif %}
+    {% if p.apply_log %}
+    <details><summary>Write log ({{ p.decided_by }}, {{ p.decided_at }} UTC)</summary><pre>{{ p.apply_log|pretty }}</pre></details>
+    {% elif p.status=='rejected' %}<div class="muted">Rejected by {{ p.decided_by }} at {{ p.decided_at }} UTC{% if p.decision_note %}: {{ p.decision_note }}{% endif %} &mdash; it will not be proposed again.</div>
+    {% endif %}
+
+    {% if p.status in ('pending','failed','stale') %}
+    <div class="btns">
+      <form method="post" action="{{ url_for('approve', pid=p.id) }}" onsubmit="return confirm('Write this change to the CRM?')" style="display:inline">
+        <button class="approve">{{ 'Retry' if p.status=='failed' else 'Approve &amp; write to CRM'|safe }}</button></form>
+      <form method="post" action="{{ url_for('reject', pid=p.id) }}" style="display:inline">
+        <input type="text" name="reason" placeholder="reason (optional)"><button class="reject">Reject</button></form>
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+{% endfor %}
+
+{% if status == 'pending' and total %}</form>
+<script>
+  function count(){ document.getElementById('selcount').textContent = document.querySelectorAll('input[name=ids]:checked').length + ' selected'; }
+  function pick(v){ document.querySelectorAll('input[name=ids]').forEach(c => c.checked = v===null ? false : c.dataset.conf==='high'); count(); }
+  function confirmBulk(e){
+    const n = document.querySelectorAll('input[name=ids]:checked').length;
+    const a = e.submitter && e.submitter.value;
+    if(!n){ alert('Select at least one proposal'); return false; }
+    return confirm((a==='approve' ? 'Approve and WRITE ' : 'Reject ') + n + ' proposal(s)?');
+  }
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block body %}
+<h2 class="group" style="margin-top:0">Coverage report</h2>
+{% if not rep %}
+  <div class="card">No report yet - run <code>python pipeline.py</code>.</div>
+{% else %}
+  <div class="card">
+    <p style="margin:0 0 8px"><b>{{ rep.counts.locations }}</b> locations on the website
+      (<span class="muted">scraped {{ web.scraped_at }}</span>) &middot; queue:
+      {% for k,v in counts.items() %}{{ k }} <b>{{ v }}</b>{{ ' &middot; '|safe if not loop.last }}{% endfor %}</p>
+    <p class="muted" style="margin:0">Every website location lands in exactly one bucket below; every CRM account under the Bellhaven parent is
+      either matched to a location or listed as an orphan.</p>
+  </div>
+
+  <table class="card" style="padding:8px">
+    <tr><th>Website location</th><th>Matched by</th><th>Result</th><th>CRM accounts</th></tr>
+    {% for e in rep.locations %}
+    <tr><td>{{ e.name }}</td><td class="muted">{{ e.matched_via }}</td>
+        <td>{{ e.classification.replace('_',' ') }}</td>
+        <td>{% for a in e.accounts %}<span class="id">{{ a.account_id }}</span> <span class="muted">{{ a.role }}</span> {% endfor %}</td></tr>
+    {% endfor %}
+  </table>
+
+  <h2 class="group">CRM accounts under Bellhaven that are not on the website</h2>
+  <table class="card" style="padding:8px">
+    <tr><th>Account</th><th>Result</th></tr>
+    {% for o in rep.orphans %}<tr><td>{{ o.name }} <span class="id">{{ o.account_id }}</span></td><td>{{ o.classification.replace('_',' ') }}</td></tr>
+    {% else %}<tr><td colspan="2" class="muted">none</td></tr>{% endfor %}
+  </table>
+{% endif %}
+{% endblock %}

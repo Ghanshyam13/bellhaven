@@ -1,0 +1,4 @@
+# Daily at 07:17 US Eastern (off the :00/:30 marks on purpose). The pipeline only fills the review queue;
+# it never writes to the CRM. A non-zero exit code (scrape or API failure, safety valve) makes cron mail the error.
+CRON_TZ=America/New_York
+17 7 * * *  cd /opt/bellhaven-crm-sync && /usr/bin/python3 pipeline.py >> logs/pipeline.log 2>&1
